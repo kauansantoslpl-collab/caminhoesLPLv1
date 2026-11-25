@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checklist Carretas · LPL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top" hidden>
+  <img class="brand-logo" src="LPL_2022_branco.png" alt="LPL">
+  <strong class="brand">Checklist de carretas</strong>
+  <span id="who"></span>
+  <button id="logout" class="ghost">Sair</button>
+</header>
+<main>
+  <section id="login" class="login-layout" hidden>
+    <div class="login-welcome">
+      <img class="login-logo" src="LPL_2022_branco.png" alt="LPL">
+      <p class="eyebrow">GESTÃO DE FROTA</p>
+      <h1>Segurança e controle em cada viagem.</h1>
+      <p>Acesse a plataforma de checklists da frota LPL para acompanhar veículos e operações em um só lugar.</p>
+      <span class="welcome-caption">CHECKLIST DE CARRETAS</span>
+    </div>
+    <form id="loginForm">
+      <p class="eyebrow">BEM-VINDO À LPL</p>
+      <h1>Entrar</h1>
+      <p class="form-intro">Entre com suas credenciais para continuar.</p>
+      <label>Usuário ou e-mail<input id="lUser" autocomplete="username" required autocapitalize="none"></label>
+      <label>Senha<input id="lPass" type="password" autocomplete="current-password" required></label>
+      <button class="primary">Entrar</button>
+      <p id="lErr" class="err"></p>
+    </form>
+  </section>
+  <section id="driver" hidden></section>
+  <section id="admin" hidden></section>
+</main>
+<dialog id="deleteDriverDialog" aria-labelledby="deleteDriverTitle" aria-describedby="deleteDriverDescription">
+  <div class="dialog-content">
+    <p class="eyebrow">CONFIRMAÇÃO</p>
+    <h2 id="deleteDriverTitle">Excluir motorista?</h2>
+    <p id="deleteDriverDescription">O cadastro de <strong id="deleteDriverName"></strong> será removido e o acesso ao sistema será bloqueado. Os checklists já enviados serão preservados.</p>
+    <p class="dialog-warning">A conta de autenticação continuará cadastrada no Firebase e não poderá ser recriada com o mesmo usuário sem removê-la também no Console do Firebase.</p>
+    <p id="deleteDriverError" class="err" role="alert"></p>
+    <div class="dialog-actions">
+      <button id="cancelDeleteDriver" type="button">Cancelar</button>
+      <button id="confirmDeleteDriver" class="danger" type="button">Excluir motorista</button>
+    </div>
+  </div>
+</dialog>
+<div id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
