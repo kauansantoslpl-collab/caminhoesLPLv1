@@ -28,29 +28,31 @@ Uso interno, não comercial. Front-end estático (HTML, CSS e JavaScript puro, s
 | Front-end | HTML + CSS + JS (módulos ES), sem framework e sem build |
 | Back end | Firebase Authentication (e-mail/senha) + Cloud Firestore |
 | Hospedagem | Vercel (site estático) |
-| Interface | Tema preto, fonte Manrope, foco em acessibilidade e uso no celular |
+| Interface | Tema escuro, fonte Manrope, identidade LPL, responsivo para celular |
 
 ### Estrutura do projeto
 
 ```
 .
-├── index.html          # Estrutura da página (cabeçalho, áreas de login, motorista e admin)
-├── style.css           # Estilos (tema preto, alto contraste, alvos de toque grandes)
-├── app.js              # Toda a lógica: autenticação, telas e acesso ao Firestore
-├── firebase-config.js  # Configuração do projeto Firebase
+├── index.html            # Estrutura: cabeçalho, login, áreas do motorista/admin e janela de exclusão
+├── style.css             # Estilos (tema escuro, responsivo, impressão)
+├── app.js                # Toda a lógica: autenticação, telas e acesso ao Firestore
+├── firebase-config.js    # Configuração do projeto Firebase
+├── firestore.rules       # Regras de segurança (publicadas manualmente no console)
+├── LPL_2022_branco.png   # Logo da LPL (cabeçalho e login)
 └── README.md
 ```
 
-> O `index.html` contém só a estrutura. As telas do motorista e do admin são montadas pelo `app.js` conforme o perfil de quem entra.
+> O `index.html` contém só a estrutura. As telas do motorista e do admin são montadas pelo `app.js` conforme o perfil de quem entra. O logo precisa ficar na mesma pasta do `index.html`.
 
 ---
 
 ## 2. Funcionalidades
 
 ### Motorista
-- Login com usuário e senha.
+- Login com usuário (ou e-mail) e senha.
 - Preenchimento do checklist: data, caminhão, quilometragem, horímetro e os 25 itens de inspeção.
-- Cada item recebe uma resposta: **OK**, **NG**, **N/A** ou **CRÍTICO**.
+- Cada item recebe uma resposta: **OK**, **NG**, **N/A** ou **CRÍTICO** (com ícone e texto, sem depender só da cor).
 - Barra de progresso fixa ("12 de 25 respondidos").
 - Observação obrigatória e campo de ação imediata quando o item é NG ou CRÍTICO.
 - Observações gerais opcionais.
@@ -58,8 +60,8 @@ Uso interno, não comercial. Front-end estático (HTML, CSS e JavaScript puro, s
 
 ### Admin
 - **Checklists:** filtro por data, motorista e placa, lista de recentes (últimos 100), detalhe item a item e impressão.
-- **Motoristas:** cadastro (nome, usuário e senha), ativar e desativar.
-- **Caminhões:** cadastro (placa, número da carreta/equipamento e descrição), ativar e desativar.
+- **Motoristas:** cadastro (nome, usuário e senha), **desativar/reativar** e **excluir** (com janela de confirmação).
+- **Caminhões:** cadastro (placa, número da carreta/equipamento e descrição), desativar/reativar.
 
 ---
 
@@ -107,12 +109,14 @@ Calculado automaticamente no envio:
 - Senão → **OK**.
 
 ### Cadastros
-- **Motoristas:** o login é o *usuário* informado em minúsculas (letras, números, ponto, hífen e sublinhado). O usuário é único. Motoristas inativos não conseguem entrar.
-- **Caminhões:** a placa é gravada em maiúsculas e sem espaços e não pode se repetir. Caminhões inativos deixam de aparecer na lista do motorista, mas o histórico de checklists é mantido.
-- Nada é excluído pelo app: usa-se **desativar**, para preservar o histórico.
+- **Admin:** é identificado pelo **UID fixo** configurado no `app.js` e nas regras do Firestore (ver seção 4). Não aparece na lista de motoristas.
+- **Motoristas:** o login é o *usuário* (letras minúsculas, números, ponto, hífen e sublinhado), que vira o e-mail interno `usuario@lpl-checklist.app`. O usuário é único.
+  - **Desativar:** o motorista não consegue mais entrar nem enviar/ler checklists (bloqueado no app e nas regras). Pode ser reativado.
+  - **Excluir:** remove o cadastro do motorista (documento em `users`) e bloqueia o acesso. Os checklists já enviados **são preservados**. A conta no Firebase Authentication **não é removida** (ver limitações).
+- **Caminhões:** a placa é gravada em maiúsculas e sem espaços e não pode se repetir. Caminhões inativos deixam de aparecer na lista do motorista, mas o histórico é mantido.
 
 ### Registros
-- Um checklist enviado **não pode ser editado** (somente o admin pode apagá-lo, pelo Firestore).
+- O app não permite editar nem apagar checklists enviados.
 - O mesmo caminhão pode ter mais de um checklist no mesmo dia (não há bloqueio de duplicidade).
 - Cada checklist guarda uma "foto" dos dados no momento do envio (nome do motorista, placa e texto dos itens), então mudanças posteriores nos cadastros não alteram os registros antigos.
 
@@ -131,24 +135,30 @@ Navegador (HTML/CSS/JS)
 
 Não há servidor próprio: o navegador conversa direto com o Firebase, e o controle de acesso é feito pelas **regras de segurança do Firestore**.
 
-### Autenticação
-O Firebase Authentication exige e-mail. Para o motorista usar só "usuário + senha", o app converte o usuário em e-mail interno:
+### Autenticação e perfis
+O Firebase Authentication exige e-mail. No login, o campo "Usuário ou e-mail" funciona assim:
 
 ```
-usuário "joao.silva"  →  joao.silva@lpl-checklist.app
+"joao.silva"           →  joao.silva@lpl-checklist.app
+"fulano@empresa.com"   →  usado como está
 ```
 
-O domínio é fictício (não recebe e-mails) e fica na constante `DOMAIN` do `app.js`.
+O domínio interno é fictício (não recebe e-mails) e fica na constante `DOMAIN` do `app.js`.
 
 **Fluxo de login**
-1. `signInWithEmailAndPassword` com o e-mail derivado.
+1. `signInWithEmailAndPassword` com o e-mail resultante.
 2. Lê `users/{uid}` no Firestore.
-3. Se o documento não existe ou `ativo === false`, faz logout e mostra "Acesso não liberado".
-4. Se `role === "admin"`, abre o painel admin; senão, a tela do motorista.
+3. Se o UID for o do admin e o documento não existir, o app **cria o documento automaticamente** (`role: "admin"`).
+4. Para os demais, se o documento não existe ou `ativo === false`, faz logout e mostra "Acesso não liberado".
+5. O admin abre o painel; o motorista abre o formulário.
 
-**Cadastro de motorista pelo admin:** o app cria a conta usando uma **segunda instância** do Firebase (`initializeApp(config, nome)`), para que o admin **não seja deslogado** ao criar outro usuário. Depois grava o perfil em `users/{uid}`.
+Erros do Firebase são traduzidos em mensagens claras (login por e-mail/senha desativado, chave de API inválida, regras não publicadas, falha de rede, credenciais incorretas etc.).
+
+**Cadastro de motorista pelo admin:** o app cria a conta usando uma **segunda instância** do Firebase (`initializeApp(config, nome)`), para que o admin **não seja deslogado**. Depois grava o perfil em `users/{uid}`.
 
 ### Modelo de dados (Firestore)
+
+As coleções só aparecem quando o primeiro documento é gravado (o Firestore não cria coleções vazias).
 
 **`users/{uid}`** (o ID do documento é o UID do Authentication)
 
@@ -193,28 +203,53 @@ O domínio é fictício (não recebe e-mails) e fica na constante `DOMAIN` do `a
 
 ### Regras de segurança do Firestore
 
-Publique no console do Firebase (Firestore > Regras):
+Publique no console do Firebase (Firestore > Regras) o conteúdo do `firestore.rules`, sempre que ele for alterado:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signed() { return request.auth != null; }
+    function signedIn() {
+      return request.auth != null;
+    }
+
     function isAdmin() {
-      return signed() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return signedIn() && request.auth.uid == "MjQLZheA6NhKLfy4Z8JM8VP8jVb2";
     }
-    match /users/{uid} {
-      allow read: if signed() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
+
+    function isActiveDriver() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "motorista"
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get("ativo", true) == true;
     }
-    match /caminhoes/{id} {
-      allow read: if signed();
-      allow write: if isAdmin();
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow create: if isAdmin() && (
+        userId == request.auth.uid
+          ? request.resource.data.role == "admin"
+          : request.resource.data.role == "motorista"
+      );
+      allow update: if isAdmin() && userId != request.auth.uid
+        && resource.data.role == "motorista"
+        && request.resource.data.role == "motorista";
+      allow delete: if isAdmin()
+        && userId != request.auth.uid
+        && resource.data.role == "motorista";
     }
-    match /checklists/{id} {
-      allow create: if signed() && request.resource.data.motoristaId == request.auth.uid;
-      allow read: if signed() && (resource.data.motoristaId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+
+    match /caminhoes/{truckId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /checklists/{checklistId} {
+      allow read: if isAdmin()
+        || (isActiveDriver() && resource.data.motoristaId == request.auth.uid);
+      allow create: if isActiveDriver()
+        && request.resource.data.motoristaId == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
   }
 }
@@ -222,15 +257,14 @@ service cloud.firestore {
 
 | Coleção | Leitura | Escrita |
 |---|---|---|
-| `users` | O próprio usuário ou admin | Somente admin |
+| `users` | Admin, ou o próprio usuário | Admin cria o próprio perfil (como admin) e cria, altera e exclui motoristas; não altera o próprio perfil nem muda `role` |
 | `caminhoes` | Qualquer usuário logado | Somente admin |
-| `checklists` | O próprio motorista ou admin | Motorista cria em nome dele; admin apaga; ninguém edita |
+| `checklists` | Admin, ou motorista **ativo** lendo os próprios | Motorista **ativo** cria em nome dele; admin pode alterar e apagar (o app não usa essas opções) |
 
 ### Interface e acessibilidade
-- Tema preto de alto contraste, fonte Manrope, texto base de 18px.
-- Botões e campos com no mínimo 56px de altura (uso com luva ou em movimento).
-- Respostas com **ícone + texto** (✓ OK, ! NG, – N/A, ⚠ CRÍTICO), sem depender só da cor.
-- Foco de teclado visível, respeito à preferência de reduzir movimento, impressão com tema claro.
+- Tema escuro, fonte Manrope, identidade visual LPL (logo no cabeçalho e tela de login em duas colunas).
+- Respostas com **ícone + texto** (✓ OK, ! NG, – N/A, ⚠ CRÍTICO).
+- Foco de teclado visível, respeito à preferência de reduzir movimento, layout responsivo e impressão com tema claro.
 
 ---
 
@@ -239,14 +273,15 @@ service cloud.firestore {
 ### Firebase
 1. Criar o projeto e adicionar um **app Web**. Copiar o `firebaseConfig` para o `firebase-config.js`.
 2. **Authentication > Sign-in method:** ativar **E-mail/senha**.
-3. **Firestore Database:** criar o banco e publicar as regras da seção anterior.
-4. **Authentication > Configurações > Domínios autorizados:** conferir o `localhost` e adicionar o domínio da Vercel.
+3. **Authentication > Usuários:** criar a conta do administrador (e-mail e senha). O **UID** dela deve ser o mesmo configurado em `ADMIN_UID` (`app.js`) e na função `isAdmin()` (`firestore.rules`).
+4. **Firestore Database:** criar o banco e publicar as regras (aba Regras).
+5. **Authentication > Configurações > Domínios autorizados:** conferir o `localhost` e adicionar o domínio da Vercel.
 
-### Primeiro administrador (uma vez só)
-1. Authentication > Usuários > **Adicionar usuário**: e-mail `admin@lpl-checklist.app` e uma senha de pelo menos 6 caracteres. Copiar o **UID**.
-2. Firestore > coleção `users` > documento com ID igual ao UID, com os campos:
-   - `nome` (string), `usuario` = `admin` (string), `role` = `admin` (string), `ativo` = `true` (boolean).
-3. Entrar no app com o usuário `admin`. Os demais cadastros são feitos pelo próprio app.
+### Primeiro acesso do administrador
+Entre com o e-mail real da conta do admin (ou o usuário correspondente) e a senha. No primeiro login o app cria automaticamente o documento `users/{UID_ADMIN}`. Depois, cadastre caminhões e motoristas pelo próprio app.
+
+### Trocar o administrador
+O UID do admin está em **dois lugares**: `ADMIN_UID` no `app.js` e a função `isAdmin()` nas regras. Altere os dois e publique as regras novamente.
 
 ### Rodar localmente
 Os módulos ES exigem um servidor (não abra o `index.html` com duplo clique):
@@ -260,7 +295,7 @@ python3 -m http.server 8000
 ---
 
 ## 6. Deploy na Vercel
-1. Suba a pasta para um repositório no GitHub.
+1. Suba a pasta para um repositório no GitHub (com o `LPL_2022_branco.png` junto).
 2. Na Vercel, **Add New > Project** e importe o repositório.
 3. *Framework Preset:* **Other**. Sem comando de build e sem pasta de saída especial (a raiz já é o site).
 4. Após o deploy, adicione o domínio da Vercel nos **Domínios autorizados** do Firebase Authentication.
@@ -268,21 +303,24 @@ python3 -m http.server 8000
 ---
 
 ## 7. Segurança
-- A `apiKey` do Firebase Web **não é segredo**: ela só identifica o projeto. Quem protege os dados são as **regras do Firestore**, então mantenha-as publicadas e revise-as.
+- A `apiKey` do Firebase Web **não é segredo**: ela só identifica o projeto. Quem protege os dados são as **regras do Firestore**, então mantenha-as publicadas e atualizadas.
 - Senhas são tratadas pelo Firebase Authentication (o app nunca as armazena).
-- Os dados de checklist são acessíveis apenas ao próprio motorista e ao admin.
-- Recomenda-se definir uma senha forte para o `admin` e trocar as senhas iniciais dos motoristas.
+- Motoristas só leem e criam os próprios checklists, e só enquanto estiverem **ativos**.
+- O UID do admin é público no código, mas não dá acesso por si só: é preciso estar autenticado nessa conta.
+- Defina uma senha forte para o admin e troque as senhas iniciais dos motoristas.
 
 ---
 
 ## 8. Limitações conhecidas
-- **Desativar motorista é verificado só pelo app** (no login). As regras não checam o campo `ativo`; para bloqueio total, o ideal é também desabilitar o usuário no Firebase Authentication.
+- **Excluir motorista não remove a conta do Firebase Authentication.** Para liberar o mesmo usuário para um novo cadastro, apague a conta também em Authentication > Usuários. Enquanto isso, quem tenta entrar com ela é barrado por não ter cadastro.
 - A **data do checklist é editável** pelo motorista (vem preenchida com o dia atual).
-- A **redefinição de senha** é manual, pelo console do Firebase (Authentication).
-- Não há exclusão de motoristas, caminhões ou checklists pelo app.
+- A **redefinição de senha** é manual, pelo console do Firebase.
+- Caminhões não podem ser excluídos pelo app (só desativados), e não há exclusão de checklists pela interface.
+- Os caminhões podem ser lidos por qualquer usuário logado, inclusive motorista desativado.
 - O filtro por motorista e placa atua sobre os resultados carregados: a lista "recentes" traz no máximo 100 registros.
 - Sem modo offline: é preciso conexão para enviar o checklist.
 - Não há fotos, assinatura, exportação para Excel/PDF nem notificações.
+- O logo original é uma imagem grande (6488×3503 px); reduzir o arquivo deixa o carregamento mais rápido no celular.
 
 ---
 
@@ -291,6 +329,6 @@ python3 -m http.server 8000
 - Bloqueio de duplicidade (um checklist por caminhão por dia) ou alerta de caminhões sem checklist no dia.
 - Anexar fotos aos itens com problema.
 - Exportação para Excel/PDF e filtro por período.
-- Redefinição de senha pelo painel do admin (Cloud Functions).
+- Exclusão completa de motoristas e redefinição de senha pelo painel (Cloud Functions com Admin SDK).
 - Modo offline (PWA) com envio quando voltar a conexão.
 - Dashboard com indicadores (itens mais reprovados, caminhões com mais ocorrências).
